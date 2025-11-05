@@ -1,54 +1,76 @@
-def gv
+#!/usr/bin/env groovy
+
+library identifier: 'jenkins-shared-library@main', retriever: modernSCM(
+    [$class: 'GitSCMSource',
+    remote: 'https://github.com/salzaidy-devops/jenkins-shared-library.git',
+    credentialsID: 'github-credentials'
+    ]
+)
+
 
 
 pipeline {
-
     agent any
 
-    parameters {
-        string(name: 'NEW_VERSION', defaultValue: '1.0.0', description: 'Version number for the build')
-        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Whether to run tests')
-        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Deployment environment')
+    tools {
+        maven 'mvn-3.9'
+    }
 
+    environment {
+        IMAGE_NAME = 'salzaidy/aws-tasks-api:1.0'
     }
 
     stages {
-        stage('initialize') {
+        stage('Initialize') {
+            steps {
+                echo 'Initializing...'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Running tests...'
+                sh 'mvn test'
+            }
+        }
+        stage('buildJarFile') {
             steps {
                 script {
-                    gv = load 'script.groovy'
+                    echo 'Building JAR file...'
+                    buildMavenJar()
                 }
             }
         }
-
-        stage('Build') {
+        stage('BuildDockerImage') {
             steps {
                 script {
-                    gv.buildApp()
+                    echo 'Building Docker image...'
+                    buildImage(ENV.IMAGE_NAME)
+                    dockerLogin()
+                    dockerPush(ENV.IMAGE_NAME)
                 }
             }
         }
-
-        stage("test") {
-            when {
-                // Conditional execution based on the RUN_TESTS parameter
-                expression {  params.RUN_TESTS }
-            }
-
-            steps {
-                script {
-                    gv.testApp()
-                }
-            }
-        }
-
-
         stage('Deploy') {
             steps {
                 script {
-                    gv.deployApp()
+                    echo 'Deploying Docker image...'
+                    def dockerCMD = "docker run -d -p 4000:4000 ${ENV.IMAGE_NAME}"
+                    
+                    sshagent(['ec2-server-key']) {
+                        // this flag is to avoid host key verification issue
+                        sh "ssh -o StrictHostKeyChecking=no ec2-user@3.17.150.175 ${dockerCMD}"
+                    }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Please check the logs.'
         }
     }
 }
