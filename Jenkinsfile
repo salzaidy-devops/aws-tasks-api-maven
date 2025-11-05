@@ -17,7 +17,8 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = 'salzaidy/aws-tasks-api:1.0'
+        IMAGE_NAME = 'salzaidy/tasks-api-mvn:2.3'
+        // IMAGE_NAME = 'salzaidy/aws-tasks-api:1.0'
     }
 
     stages {
